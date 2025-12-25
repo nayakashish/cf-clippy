@@ -9,7 +9,26 @@
 	"compatibility_date": "2025-12-23",
 	"observability": {
 		"enabled": true
-	}
+	},
+	"kv_namespaces": [
+		{
+			"binding": "CLIPBOARD_KV",
+			"id": "7ecdc71d4cb34dc4985fb9024928c718"
+		}
+	],
+	"build": {
+		"command": ""
+	},
+	"rules": [
+		{
+			"type": "Text",
+			"globs": [
+				"**/*.html",
+				"**/*.css"
+			],
+			"fallthrough": true
+		}
+	]
 	/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement

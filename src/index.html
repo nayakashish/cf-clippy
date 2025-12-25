@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClipShare</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="https://kit.fontawesome.com/64091c808d.js" crossorigin="anonymous"></script>
+</head>
+
+<body>
+    <div id="app">
+        <!-- Main Clip Creation Area -->
+        <div class="main-section">
+            <div class="centered-content">
+                <h1>ClipShare</h1>
+
+                <input type="text" id="clipText" placeholder="Paste here..." maxlength="10000" class="text-input" />
+
+                <div class="controls">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="isPublic" checked class="checkbox" />
+                        <span>Public</span>
+                    </label>
+
+                    <select id="expiration" class="select hidden">
+                        <option value="5m">5 minutes</option>
+                        <option value="1h" selected>1 hour</option>
+                        <option value="24h">24 hours</option>
+                        <option value="first">First view</option>
+                    </select>
+
+                    <button id="createBtn" class="btn btn-primary">
+                        Create Clip
+                    </button>
+                </div>
+
+                <div class="text-center mt-6">
+                    <a href="/how-it-works" class="text-link text-xs">
+                        How does this work?
+                    </a>
+                </div>
+            </div>
+
+            <!-- Scroll indicator -->
+            <div id="scrollIndicator" class="scroll-indicator">
+                <span>Scroll for public feed</span>
+                <i class="fa-solid fa-angle-down"></i>
+            </div>
+        </div>
+
+        <!-- Public Feed Section -->
+        <div class="feed-section">
+            <div class="feed-container">
+                <h2>Public Feed</h2>
+                <div id="publicFeed" class="feed-items"></div>
+            </div>
+        </div>
+    </div>
+
+    <footer style="text-align: center; padding: 1rem 0; color: #9ca3af; font-size: 0.9rem; background-color: #fafaf9;">
+        &copy; 2025 <a href="https://nayakshish.cc" style="color: #9ca3af; text-decoration: none;">ClipShare</a>. All
+        rights reserved. <a href="/credits" style="color: #9ca3af;">Credits</a>
+    </footer>
+
+
+    <!-- Success Modal -->
+    <div id="successModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Clip Created</h3>
+                <button id="closeModal" class="modal-close">
+                    <svg class="icon-sm" viewBox="0 0 24 24">
+                        <path d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="mb-6">
+                <p class="text-xs text-gray-500 mb-6">Your link</p>
+                <div class="link-display">
+                    <code id="generatedLink" class="link-code"></code>
+                    <button id="copyLinkBtn" class="link-copy-btn">
+                        <svg class="icon" viewBox="0 0 24 24">
+                            <path
+                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z">
+                            </path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="qr-container">
+                <div id="qrcode" class="qr-placeholder"></div>
+            </div>
+
+            <p id="expirationText" class="text-xs text-gray-500 text-center mb-6"></p>
+
+            <button id="createAnotherBtn" class="btn btn-secondary" style="width: 100%;">
+                Create Another
+            </button>
+        </div>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script>
+        const clipText = document.getElementById('clipText');
+        const isPublicCheck = document.getElementById('isPublic');
+        const expirationSelect = document.getElementById('expiration');
+        const createBtn = document.getElementById('createBtn');
+        const successModal = document.getElementById('successModal');
+        const closeModal = document.getElementById('closeModal');
+        const generatedLink = document.getElementById('generatedLink');
+        const copyLinkBtn = document.getElementById('copyLinkBtn');
+        const createAnotherBtn = document.getElementById('createAnotherBtn');
+        const publicFeed = document.getElementById('publicFeed');
+        const expirationText = document.getElementById('expirationText');
+        const qrcodeDiv = document.getElementById('qrcode');
+
+        // Toggle expiration dropdown visibility
+        isPublicCheck.addEventListener('change', () => {
+            if (isPublicCheck.checked) {
+                expirationSelect.classList.add('hidden');
+            } else {
+                expirationSelect.classList.remove('hidden');
+            }
+        });
+
+        // Enable/disable create button
+        clipText.addEventListener('input', () => {
+            createBtn.disabled = !clipText.value.trim();
+        });
+
+        // Create clip
+        createBtn.addEventListener('click', async () => {
+            const text = clipText.value.trim();
+            if (!text) return;
+
+            const data = {
+                text,
+                isPublic: isPublicCheck.checked,
+                expiration: isPublicCheck.checked ? 'first' : expirationSelect.value
+            };
+
+            try {
+                const response = await fetch('/api/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    if (result.phraseId) {
+                        // Private clip - show modal
+                        const fullUrl = window.location.origin + '/' + result.phraseId;
+                        generatedLink.textContent = fullUrl;
+
+                        // Generate QR code
+                        qrcodeDiv.innerHTML = '';
+                        new QRCode(qrcodeDiv, {
+                            text: fullUrl,
+                            width: 192,
+                            height: 192
+                        });
+
+                        const expOptions = {
+                            '5m': '5 minutes',
+                            '1h': '1 hour',
+                            '24h': '24 hours',
+                            'first': 'First view'
+                        };
+                        expirationText.textContent = 'Expires: ' + expOptions[data.expiration];
+
+                        successModal.classList.remove('hidden');
+                    } else {
+                        // Public clip - just refresh feed
+                        clipText.value = '';
+                        loadPublicFeed();
+                    }
+                }
+            } catch (err) {
+                alert('Error creating clip');
+            }
+        });
+
+        // Copy link button
+        copyLinkBtn.addEventListener('click', async () => {
+            await navigator.clipboard.writeText(generatedLink.textContent);
+            copyLinkBtn.innerHTML = '<svg class="icon" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"></path></svg>';
+            setTimeout(() => {
+                copyLinkBtn.innerHTML = '<svg class="icon" viewBox="0 0 24 24"><path d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>';
+            }, 2000);
+        });
+
+        // Close modal
+        closeModal.addEventListener('click', () => {
+            successModal.classList.add('hidden');
+        });
+
+        // Create another
+        createAnotherBtn.addEventListener('click', () => {
+            successModal.classList.add('hidden');
+            clipText.value = '';
+        });
+
+        // Load public feed
+        async function loadPublicFeed() {
+            try {
+                const response = await fetch('/api/feed');
+                const result = await response.json();
+
+                if (result.clips && result.clips.length > 0) {
+                    publicFeed.innerHTML = result.clips.map((clip, idx) => `
+            <div class="feed-item">
+              <div class="feed-item-content">
+                <p class="feed-item-preview">${clip.preview}</p>
+                <p class="feed-item-timestamp">${clip.timestamp}</p>
+              </div>
+              <button onclick="copyFromFeed('${clip.id}', ${idx})" class="copy-btn">
+                <svg class="icon" viewBox="0 0 24 24">
+                  <path d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                </svg>
+                Copy
+              </button>
+            </div>
+          `).join('');
+                } else {
+                    publicFeed.innerHTML = '<p class="empty-state">No clips available</p>';
+                }
+            } catch (err) {
+                publicFeed.innerHTML = '<p class="empty-state">Error loading feed</p>';
+            }
+        }
+
+        // Copy from feed
+        window.copyFromFeed = async (id, idx) => {
+            try {
+                const response = await fetch('/api/copy/' + id, { method: 'POST' });
+                const result = await response.json();
+
+                if (result.success && result.text) {
+                    await navigator.clipboard.writeText(result.text);
+                    loadPublicFeed(); // Refresh to remove the copied clip
+                }
+            } catch (err) {
+                alert('Error copying clip');
+            }
+        };
+
+        // Initial load
+        loadPublicFeed();
+        createBtn.disabled = true;
+
+        // Hide scroll indicator when scrolling
+        window.addEventListener('scroll', () => {
+            const scrollIndicator = document.getElementById('scrollIndicator');
+            if (window.scrollY > 100) {
+                scrollIndicator.style.opacity = '0';
+            } else {
+                scrollIndicator.style.opacity = '1';
+            }
+        });
+    </script>
+</body>
+
+</html>
