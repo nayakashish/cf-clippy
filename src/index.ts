@@ -77,14 +77,35 @@ export default {
 			const data: ClipData = await request.json();
 
 			if (data.isPublic) {
-				const id = 'pub_' + Math.random().toString(36).substring(7);
+				const id = 'pub_' + Date.now() + '_' + Math.random().toString(36).substring(7);
 				const clipData = {
 					text: data.text,
 					isPublic: true,
 					expiration: 'first',
 					createdAt: Date.now()
 				};
+
+				// Store the clip
 				await env.CLIPBOARD_KV.put(id, JSON.stringify(clipData));
+
+				// Also store in a public feed index for faster retrieval
+				const feedKey = 'PUBLIC_FEED';
+				const existingFeed = await env.CLIPBOARD_KV.get(feedKey);
+				const feedItems = existingFeed ? JSON.parse(existingFeed) : [];
+
+				feedItems.unshift({
+					id,
+					preview: data.text.substring(0, 60) + (data.text.length > 60 ? '...' : ''),
+					timestamp: Date.now()
+				});
+
+				// Keep only last 50 items in feed
+				if (feedItems.length > 50) {
+					feedItems.splice(50);
+				}
+
+				await env.CLIPBOARD_KV.put(feedKey, JSON.stringify(feedItems));
+
 				return Response.json({ success: true });
 			} else {
 				let phraseId = generatePhraseId();
@@ -114,20 +135,22 @@ export default {
 
 		// API: Get public feed
 		if (path === '/api/feed' && request.method === 'GET') {
-			const list = await env.CLIPBOARD_KV.list({ prefix: 'pub_' });
-			const clips = [];
+			const feedKey = 'PUBLIC_FEED';
+			const feedData = await env.CLIPBOARD_KV.get(feedKey);
 
-			for (const key of list.keys) {
-				const data = await env.CLIPBOARD_KV.get(key.name);
-				if (data) {
-					const clipData: ClipData = JSON.parse(data);
-					const preview = clipData.text.substring(0, 60) + (clipData.text.length > 60 ? '...' : '');
-					const timestamp = getRelativeTime(clipData.createdAt);
-					clips.push({ id: key.name, preview, timestamp });
-				}
+			if (!feedData) {
+				return Response.json({ clips: [] });
 			}
 
-			clips.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+			const feedItems = JSON.parse(feedData);
+
+			// Add relative timestamps
+			const clips = feedItems.map((item: any) => ({
+				id: item.id,
+				preview: item.preview,
+				timestamp: getRelativeTime(item.timestamp)
+			}));
+
 			return Response.json({ clips });
 		}
 
@@ -138,7 +161,19 @@ export default {
 
 			if (data) {
 				const clipData: ClipData = JSON.parse(data);
+
+				// Delete the clip
 				await env.CLIPBOARD_KV.delete(id);
+
+				// Remove from public feed index
+				const feedKey = 'PUBLIC_FEED';
+				const feedData = await env.CLIPBOARD_KV.get(feedKey);
+				if (feedData) {
+					const feedItems = JSON.parse(feedData);
+					const updatedFeed = feedItems.filter((item: any) => item.id !== id);
+					await env.CLIPBOARD_KV.put(feedKey, JSON.stringify(updatedFeed));
+				}
+
 				return Response.json({ success: true, text: clipData.text });
 			}
 
@@ -210,7 +245,7 @@ export default {
         <h3>QR Codes</h3>
         <p class="text-gray-600" style="margin-bottom: 0.75rem;">Every private clip generates a QR code automatically.</p>
         <ul>
-          <li>Perfect for sending text from phone to computer</li>
+          <li>Perfect for sending text from computer to phone</li>
           <li>Just scan the QR code with your phone camera</li>
           <li>Opens the clip link directly in your browser</li>
         </ul>
@@ -435,8 +470,7 @@ export default {
     <a href="/" class="btn btn-primary btn-lg">
       Create a New Clip
     </a>
-  </div>
-   
+  </div>   
 </body>
 </html>`, {
 					status: 404,
