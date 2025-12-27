@@ -467,7 +467,7 @@ export default {
   <div class="error-content">
     <h1>Clip Not Found</h1>
     <p>This clip may have expired or never existed.</p>
-    <a href="/" class="btn btn-primary btn-lg">
+    <a href="/" class="btn btn-primary btn-lg" style="text-decoration:none;">
       Create a New Clip
     </a>
   </div>   

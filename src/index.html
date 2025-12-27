@@ -18,6 +18,10 @@
 
                 <input type="text" id="clipText" placeholder="Paste here..." maxlength="10000" class="text-input" />
 
+                <div class="text-center mt-6" style="margin-top: 0.5rem;">
+                    <span id="charCounter" class="text-xs text-gray-400">0/10000</span>
+                </div>
+
                 <div class="controls">
                     <label class="checkbox-label">
                         <input type="checkbox" id="isPublic" checked class="checkbox" />
@@ -69,15 +73,12 @@
     <div id="successModal" class="modal hidden">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>Clip Created</h3>
-                <button id="closeModal" class="modal-close">
-                    <svg class="icon-sm" viewBox="0 0 24 24">
-                        <path d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
+                <h3 id="modalTitle">Clip Created</h3>
+                <button id="closeModal" class="modal-close" aria-label="Close">
+                    <i class="fa-solid fa-xmark"></i>
                 </button>
             </div>
-
-            <div class="mb-6">
+            <div id="linkSection" class="mb-6">
                 <p class="text-xs text-gray-500 mb-6">Your link</p>
                 <div class="link-display">
                     <code id="generatedLink" class="link-code"></code>
@@ -118,6 +119,23 @@
         const publicFeed = document.getElementById('publicFeed');
         const expirationText = document.getElementById('expirationText');
         const qrcodeDiv = document.getElementById('qrcode');
+        const charCounter = document.getElementById('charCounter');
+        const linkSection = document.getElementById('linkSection');
+        const modalTitle = document.getElementById('modalTitle');
+
+        // Character counter
+        clipText.addEventListener('input', () => {
+            const length = clipText.value.length;
+            charCounter.textContent = `${length}/10000`;
+            createBtn.disabled = !clipText.value.trim();
+        });
+
+        // Enter key to create clip
+        clipText.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && clipText.value.trim()) {
+                createBtn.click();
+            }
+        });
 
         // Toggle expiration dropdown visibility
         isPublicCheck.addEventListener('change', () => {
@@ -126,11 +144,6 @@
             } else {
                 expirationSelect.classList.remove('hidden');
             }
-        });
-
-        // Enable/disable create button
-        clipText.addEventListener('input', () => {
-            createBtn.disabled = !clipText.value.trim();
         });
 
         // Create clip
@@ -155,9 +168,14 @@
 
                 if (result.success) {
                     if (result.phraseId) {
-                        // Private clip - show modal
+                        // Private clip - show modal with link
                         const fullUrl = window.location.origin + '/' + result.phraseId;
                         generatedLink.textContent = fullUrl;
+
+                        // Show link section and "Create Another" button
+                        linkSection.style.display = 'block';
+                        createAnotherBtn.style.display = 'block';
+                        modalTitle.textContent = 'Clip Created';
 
                         // Generate QR code
                         qrcodeDiv.innerHTML = '';
@@ -179,6 +197,7 @@
                     } else {
                         // Public clip - just refresh feed
                         clipText.value = '';
+                        charCounter.textContent = '0/10000';
                         loadPublicFeed();
                     }
                 }
@@ -199,12 +218,17 @@
         // Close modal
         closeModal.addEventListener('click', () => {
             successModal.classList.add('hidden');
+            // Reset modal state
+            linkSection.style.display = 'block';
+            createAnotherBtn.style.display = 'block';
+            modalTitle.textContent = 'Clip Created';
         });
 
         // Create another
         createAnotherBtn.addEventListener('click', () => {
             successModal.classList.add('hidden');
             clipText.value = '';
+            charCounter.textContent = '0/10000';
         });
 
         // Load public feed
@@ -220,12 +244,18 @@
                 <p class="feed-item-preview">${clip.preview}</p>
                 <p class="feed-item-timestamp">${clip.timestamp}</p>
               </div>
-              <button onclick="copyFromFeed('${clip.id}', ${idx})" class="copy-btn">
-                <svg class="icon" viewBox="0 0 24 24">
-                  <path d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-                </svg>
-                Copy
-              </button>
+              <div style="display: flex; gap: 0.5rem;">
+                <button onclick="showQRForFeed('${clip.id}')" class="copy-btn" title="Show QR Code">
+                  <i class="fa-solid fa-qrcode"></i>
+                  QR
+                </button>
+                <button onclick="copyFromFeed('${clip.id}', ${idx})" class="copy-btn">
+                  <svg class="icon" viewBox="0 0 24 24">
+                    <path d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                  </svg>
+                  Copy
+                </button>
+              </div>
             </div>
           `).join('');
                 } else {
@@ -235,6 +265,29 @@
                 publicFeed.innerHTML = '<p class="empty-state">Error loading feed</p>';
             }
         }
+
+        // Show QR code for public feed item (QR only, no link)
+        window.showQRForFeed = (id) => {
+            const fullUrl = window.location.origin + '/' + id;
+            generatedLink.textContent = fullUrl;
+
+            // Hide link section and "Create Another" button
+            linkSection.style.display = 'none';
+            createAnotherBtn.style.display = 'none';
+            modalTitle.textContent = 'Scan QR Code';
+
+            // Generate QR code
+            qrcodeDiv.innerHTML = '';
+            new QRCode(qrcodeDiv, {
+                text: fullUrl,
+                width: 192,
+                height: 192
+            });
+
+            expirationText.textContent = 'Expires after first copy';
+
+            successModal.classList.remove('hidden');
+        };
 
         // Copy from feed
         window.copyFromFeed = async (id, idx) => {
